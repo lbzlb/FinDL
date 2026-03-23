@@ -1,0 +1,116 @@
+# TimeXer 模型配置文件（学习型Missing Embedding + Instance Normalization）
+# 版本: v0.45
+# 日期: 20260207
+
+metadata:
+  version: "v0.45"
+  date: "20260207"
+  description: "TimeXer模型配置 - 双分支架构（内生+宏观），交叉注意力融合 - 支持细粒度LayerNorm控制 - 学习型Missing Embedding + Instance Normalization"
+
+model:
+  name: "timexer"
+  
+  # 输入输出维度（会自动根据实际数据调整，这里的值只是初始值）
+  seq_len: 500          # 输入序列长度（会自动检测并更新）
+  n_features: 64        # 总特征数量（会自动检测并更新，无需手动修改）
+  prediction_len: 1     # 预测长度（输出维度）
+  
+  # 特征分离方案选择
+  # 可选值: "default" 或 "subset10"
+  # - "default": 内生[0-43]共44个，外生[44-63]共20个（原方案）
+  # - "subset10": 内生[1-10]共10个，外生[0,11-63]共54个（新方案）
+  feature_split_preset: "default"
+  
+  # 特征分离配置（使用位置索引）
+  # 注意：以下索引列表会被 feature_split_preset 自动覆盖
+  # 方式1: 使用索引列表（推荐，更灵活）
+  endogenous_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43]  # 内生数据位置索引（共44个）
+  exogenous_indices: [44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63]  # 宏观数据位置索引（共20个）
+  
+  # 方式2: 使用特征数量（保留以兼容，如果提供了索引列表则忽略）
+  endogenous_features: 44    # 内生特征数量（公司内部数据）
+  exogenous_features: 20     # 宏观特征数量（宏观指标）
+  
+  # 内生分支配置
+  endogenous_blocks: 3       # 内生分支TSMixer块数量
+  endogenous_hidden_dim: 256 # 内生分支隐藏维度
+  
+  # 宏观分支配置
+  exogenous_blocks: 2        # 宏观分支TSMixer块数量
+  exogenous_hidden_dim: 256  # 宏观分支隐藏维度
+  
+  # 共享时间混合配置
+  shared_time_mixing: true   # 是否共享时间混合层
+  time_mixing_type: "attention"  # "mlp" 或 "attention"
+  time_attn_n_heads: 8       # 时间注意力头数（当time_mixing_type="attention"时）
+  use_rope: true             # 是否使用RoPE位置编码（当time_mixing_type="attention"时）
+  
+  # 交叉注意力融合配置
+  cross_attn_n_heads: 8      # 交叉注意力头数
+  cross_attn_ff_dim: 1024    # 交叉注意力FFN维度
+  
+  # 通用配置
+  dropout: 0.1               # Dropout比率
+  activation: "gelu"         # 激活函数: "gelu" 或 "relu"
+  norm_type: "layer"         # 归一化类型（保留以兼容）
+  use_residual: true         # 是否启用残差连接
+  
+  # ========== 细粒度LayerNorm控制（v0.41新增） ==========
+  use_layernorm: true                    # 全局开关（向后兼容，如果为false则全部禁用）
+  use_layernorm_in_tsmixer: false        # TSMixerBlock中是否使用LayerNorm（禁用以减少归一化）
+  use_layernorm_in_attention: true       # 注意力层中是否使用LayerNorm（强烈建议保留）
+  use_layernorm_before_pooling: false    # 时间聚合前是否使用LayerNorm（禁用以减少归一化）
+  
+  # 保留以兼容训练脚本的参数（不使用）
+  n_blocks: 3           # TSMixer块数量（保留以兼容，不使用）
+  ff_dim: 2048          # 前馈网络隐藏维度（保留以兼容，不使用）
+  
+  # 时间维度聚合配置
+  temporal_aggregation:
+    use_attention: false  # 使用简单平均池化
+  
+  # 输出投影配置
+  output_projection:
+    hidden_dim: 20      # 输出投影层隐藏维度（保留以兼容，实际架构固定）
+  
+  # ========== v0.45新增：Instance Normalization配置 ==========
+  use_norm: true                    # 是否使用Instance Normalization
+  norm_feature_indices: [ 1, 2, 3, 4, 5, 6, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33,
+                        34, 35, 36, 37, 38, 39, 40, 41, 42, 43,44, 45, 46, 47, 48, 49, 52, 54, 55, 56, 57, 58, 59, 62]        # 需要归一化的特征索引列表
+                                    # - null: 归一化所有特征（推荐）
+                                    # - [0,1,2,...]: 只归一化指定索引的特征
+  output_feature_index: 2           # 输出对应的特征索引（用于反归一化）
+                                    # 索引2 = 第3个特征 = "收盘"价格
+
+# 架构说明：
+# - 双分支架构：内生分支处理公司内部数据（44维），宏观分支处理宏观指标（20维）
+# - 共享时间混合层：两分支共享时间混合块，减少参数量
+# - 内生分支：3个LightweightTSMixerBlock，hidden_dim=256
+# - 宏观分支：2个LightweightTSMixerBlock，hidden_dim=256
+# - 交叉注意力融合：3层（内生×宏观，自注意力，宏观×内生）
+# - FFN结构：d_model → Linear → 激活 → 5层残差 → Linear(→1024) → 激活 → Linear(→d_model) → 激活 → 5层残差
+# - 输出投影：256维残差 → 64维残差 → 32维残差 → prediction_len
+#
+# v0.41版本变更：
+# - 新增细粒度LayerNorm控制
+# - 默认配置：仅在注意力层保留LayerNorm，TSMixerBlock和时间聚合前的LayerNorm已禁用
+# - 原因：输入数据已经过归一化预处理，减少模型内部归一化以避免信息损失
+# - LayerNorm保留位置：CrossAttentionLayer、SelfAttentionLayer（共6个LayerNorm）
+# - LayerNorm移除位置：TSMixerBlock（10个）、时间聚合前（2个）
+#
+# v0.43版本变更（学习型Missing Embedding）：
+# - 在forward开头自动检测-1000标记的缺失值
+# - 将缺失值替换为可学习的embedding向量（小值初始化，0.01量级）
+# - 替换发生在第一个线性层之前，确保数值稳定
+# - 不需要修改数据预处理流程，原始.pt文件中的-1000直接使用
+#
+# v0.45版本新增（Instance Normalization）：
+# - Instance Normalization：模型内部对输入进行归一化（每个样本独立）
+# - 反归一化：输出前将预测值还原到原始尺度
+# - 损失计算在原始尺度上进行，更符合业务含义
+# - 使用 output_feature_index（索引2="收盘"）进行反归一化
+# - 优势：
+#   * 数值稳定：Instance Normalization 统一数据尺度
+#   * 损失合理：在原始尺度（股价）上计算损失
+#   * 业务可解释：预测输出直接是股价，无需后处理
+#   * 模型内自包含：归一化和反归一化都在模型内部完成

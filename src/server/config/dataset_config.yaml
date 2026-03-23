@@ -1,0 +1,46 @@
+# 数据集配置文件
+# 版本: v0.1
+# 日期: 20251212
+
+metadata:
+  version: "v0.1"
+  date: "20251212"
+  description: "数据集配置"
+
+dataset:
+  # 索引文件路径
+  index_dir: "/data/project_20251211/data/processed/roll_generate_index_v0.4_20251225_210605"
+  train_index_file: "train_samples_index.parquet"
+  val_index_file: "val_samples_index.parquet"
+  
+  # 数据路径
+  data_dir: "/data/project_20251211/data/raw/processed_data_20251220"
+  
+  # 特征配置
+  features:
+    # 需要排除的元数据列（不用于训练）
+    # 排除原因：
+    # - "日期": 时间戳元数据
+    # - "company_name": 字符串类型，非数值
+    # - "sequence_id": 元数据标识符
+    # - "stock_code": 字符串类型，非数值
+    # - "货币单位": 元数据标识符
+    exclude_columns:
+      - "日期"
+      - "company_name"
+      - "sequence_id"
+      - "stock_code"
+      # - "货币单位"
+    
+    # 目标列（要预测的列）
+    target_column: "收盘"
+    
+    # 是否标准化特征
+    normalize: true
+    # 标准化方法: "standard" (Z-score) 或 "minmax"
+    normalize_method: "standard"
+  
+  # 数据加载配置
+  cache_enabled: true  # 是否启用文件缓存
+  cache_size: 500      # 缓存文件数量上限（增大提升缓存命中率）
+
