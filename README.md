@@ -10,48 +10,57 @@
 
 ```text
 FinDL/
+├─ .gitignore
+├─ .project-root
+├─ README.md
+├─ peoject代码数据处理验证流程-20260214-陈俊同.docx
+├─ pyproject.toml
 ├─ script/
 │  ├─ local.py
 │  └─ server.py
 ├─ src/
+│  ├─ __init__.py
 │  ├─ local/
+│  │  └─ code/
+│  │     ├─ __init__.py
+│  │     ├─ crawl_index_data.py
+│  │     ├─ crawl_stock_data.py
+│  │     ├─ merge_stock_index.py
+│  │     └─ spider/
+│  │        ├─ __init__.py
+│  │        ├─ eastmoney_financial.py
+│  │        ├─ eastmoney_kline.py
+│  │        ├─ financial_data_mapper.py
+│  │        └─ us_financial_analysis_indicator.py
+│  ├─ server/
 │  │  ├─ code/
-│  │  │  ├─ crawl_index_data.py
-│  │  │  ├─ crawl_stock_data.py
-│  │  │  ├─ merge_stock_index.py
-│  │  │  └─ spider/
-│  │  │     ├─ eastmoney_financial.py
-│  │  │     ├─ eastmoney_kline.py
-│  │  │     ├─ financial_data_mapper.py
-│  │  │     └─ us_financial_analysis_indicator.py
-│  │  └─ data/
-│  │     ├─ macro_indices.xlsx
-│  │     ├─ 股票代码汇总-陈俊同-20251118.xlsx
-│  │     ├─ 东方财富财务数据API映射最终版-陈俊同-20251030.xlsx
-│  │     ├─ stock/
-│  │     └─ processed/
-│  └─ server/
-│     ├─ code/
-│     │  ├─ roll_generate_index_v0.7_20260111154500.py
-│     │  ├─ process_data_NaNto-1000_20260213.py
-│     │  ├─ extract_company_data_v0.3_20260126155425.py
-│     │  ├─ parquet_to_predata_v0.01_20260214.py
-│     │  ├─ train_timexer.py
-│     │  ├─ predict_and_evaluate_v0.1_20260212123505.py
-│     │  ├─ predict_with_predata_v0.1_20260120133643.py
-│     │  └─ ...（trainer、数据集、特征与指标等辅助模块）
-│     ├─ config/
-│     │  ├─ dataset_config.yaml
-│     │  ├─ timexer_config.yaml
-│     │  └─ training_config.yaml
-│     └─ data/
-│        ├─ roll_generate_index/
-│        ├─ preprocess_data_NaNto-1000/
-│        ├─ data_v0.01/
-│        ├─ experiments/
-│        └─ predict/
-└─ README.md
+│  │  │  ├─ __init__.py
+│  │  │  ├─ data_utils.py
+│  │  │  ├─ extract_company_data_v0.3_20260126155425.py
+│  │  │  ├─ feature_selector.py
+│  │  │  ├─ feature_utils.py
+│  │  │  ├─ loss_utils.py
+│  │  │  ├─ metrics_utils.py
+│  │  │  ├─ parquet_to_predata_v0.01_20260214.py
+│  │  │  ├─ predict_and_evaluate_v0.1_20260212123505.py
+│  │  │  ├─ predict_with_predata_v0.1_20260120133643.py
+│  │  │  ├─ preprocessed_dataset.py
+│  │  │  ├─ process_data_NaNto-1000_20260213.py
+│  │  │  ├─ roll_generate_index_v0.7_20260111154500.py
+│  │  │  ├─ stock_dataset.py
+│  │  │  ├─ train_timexer.py
+│  │  │  └─ trainer.py
+│  │  └─ config/
+│  │     ├─ dataset_config.yaml
+│  │     ├─ timexer_config.yaml
+│  │     └─ training_config.yaml
+│  └─ utils/
+│     ├─ __init__.py
+│     └─ parquet_to_excel.py
+└─ uv.lock
 ```
+
+（上表与当前仓库中**未被 `.gitignore` 忽略**的文件一致：`git ls-files` 与 `git ls-files --others --exclude-standard`；运行时生成的 `src/local/data/`、`src/server/data/` 等被忽略目录不在此列。）
 
 ## 文件作用说明
 
