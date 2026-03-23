@@ -30,16 +30,16 @@ sys.path.insert(0, str(project_root))
 
 # ===== 配置区域（修改此处） =====
 # 模型目录
-MODEL_DIR = "src/server/data/experiments/timexer_latest"
+MODEL_DIR = "data/experiments/timexer_latest"
 
 # 预处理数据目录（训练集/验证集，用于阶段一）
-PREPROCESSED_DATA_DIR = "src/server/data/preprocess_data_NaNto-1000"
+PREPROCESSED_DATA_DIR = "data/preprocess_data_NaNto-1000"
 
 # 预测数据文件（.pt文件路径，用于阶段二）
-PREDATA_FILE = "src/server/data/data_v0.01/data.pt"
+PREDATA_FILE = "data/data_v0.01/data.pt"
 
 # 输出目录（结果将保存在此目录下的子文件夹中）
-OUTPUT_DIR = "src/server/data/predict"
+OUTPUT_DIR = "data/predict"
 
 # 计算设备
 DEVICE = "cuda"  # 或 'cpu'
@@ -199,10 +199,10 @@ def load_model_dynamically(model_dir: Path, device: str = "cuda"):
         models_path = project_root / "src" / "models" / "v0.53_20260207"
         print("使用TimeXerMLP v0.53模型（Instance Normalization + 反归一化）")
     elif model_version == "v0.45_20260207":
-        models_path = project_root / "src/server/code"
+        models_path = project_root / "src" / "server" / "models"
         print("使用TimeXer v0.45模型（Instance Normalization + 反归一化）")
     else:
-        models_path = project_root / "src/server/code"
+        models_path = project_root / "src" / "server" / "models"
 
     if model_type == "itransformer":
         itransformer_module = _load_module(

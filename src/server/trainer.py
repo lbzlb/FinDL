@@ -34,10 +34,10 @@ def _load_module(module_path: Path, module_name: str):
     return module
 
 # 导入metrics工具
-project_root = Path(__file__).parent.parent.parent.parent
-utils_path = project_root / "src" / "utils" / "v0.1_20251212"
 try:
-    metrics_module = _load_module("src/server/code/metrics_utils.py", "metrics_utils")
+    metrics_module = _load_module(
+        Path(__file__).resolve().parent / "utils" / "metrics_utils.py", "metrics_utils"
+    )
     compute_metrics = metrics_module.compute_metrics
     format_metrics = metrics_module.format_metrics
 except Exception as e:

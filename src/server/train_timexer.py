@@ -4,26 +4,16 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from pathlib import Path
 import yaml
-import argparse
-import sys
-import importlib.util
 from datetime import datetime
-import pandas as pd
-import json
-import os
-import re
 
+rootutils.setup_root(__file__, indicator=".python-version", pythonpath=True)
+from src.server.models.timexer import TimeXer
+from src.server.preprocessed_dataset import PreprocessedStockDataset
+from src.server.trainer import EarlyStopping, Trainer
+from src.server.utils.feature_utils import save_feature_stats
+from src.server.utils.loss_utils import MAPELoss, SMAPELoss
 
-rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-from src.models.timexer import TimeXer
-from src.server.code.stock_dataset import StockDataset
-from src.server.code.preprocessed_dataset import PreprocessedStockDataset
-from src.server.code.trainer import EarlyStopping, Trainer
-from src.server.code.feature_utils import get_feature_columns, save_feature_stats, compute_feature_stats
-from src.server.code.data_utils import get_data_by_rows, load_parquet_file
-from src.server.code.loss_utils import MAPELoss, SMAPELoss
-
-DEFAULT_PREPROCESSED_DIR = Path("src/server/data/preprocess_data_NaNto-1000")
+DEFAULT_PREPROCESSED_DIR = Path("data/preprocess_data_NaNto-1000")
 
 DATA_DEVICE = "cpu"  # 修改此处: 'cpu' 或 'cuda'
 
@@ -92,48 +82,6 @@ def create_criterion(loss_config: dict) -> nn.Module:
         )
 
 
-def compute_train_stats(train_dataset: StockDataset, dataset_config: dict) -> dict:
-    """计算训练集的特征统计量"""
-    print("计算训练集特征统计量...")
-
-    # 获取特征列
-    exclude_columns = dataset_config["features"]["exclude_columns"]
-
-    # 从训练集中采样一些数据来计算统计量
-    # 为了避免内存问题，只使用部分数据
-    sample_size = min(1000, len(train_dataset))
-    indices = torch.randperm(len(train_dataset))[
-        :sample_size
-    ].tolist()  # 转换为Python列表
-
-    all_features = []
-    for idx in indices:
-        sample = train_dataset.index_df.iloc[idx]
-        source_file = sample["source_file"]
-
-        # 读取数据文件
-        df = load_parquet_file(source_file, use_cache=True)
-
-        # 提取输入数据
-        input_start = sample["input_row_start"]
-        input_end = sample["input_row_end"]
-        input_df = get_data_by_rows(df, input_start, input_end)
-
-        # 获取特征列
-        feature_columns = get_feature_columns(input_df, exclude_columns)
-        features = input_df[feature_columns]
-        all_features.append(features)
-
-    # 合并所有特征
-    all_features_df = pd.concat(all_features, ignore_index=True)
-
-    # 计算统计量
-    stats = compute_feature_stats(all_features_df, feature_columns, method="standard")
-
-    print(f"特征统计量计算完成，共 {len(stats)} 个特征")
-    return stats
-
-
 def main():
     model_config_path = "src/server/config/timexer_config.yaml"
 
@@ -194,7 +142,7 @@ def main():
 
     
     
-    output_dir = Path("src/server/data/experiments/timexer_latest")
+    output_dir = Path("data/experiments/timexer_latest")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n输出目录: {output_dir}")
@@ -389,7 +337,7 @@ def main():
         # 使用完整的模型文件夹名称作为运行名称
         run_name = output_dir.name
         tensorboard_dir = output_dir / tb_log_dir / run_name
-        print(f"\nTensorBoard已启用")
+        print("\nTensorBoard已启用")
         print(f"  日志目录: {tensorboard_dir}")
         print(f"  运行名称: {run_name}")
         print(f"  记录间隔: 每 {tb_config.get('log_interval', 50)} batch")
@@ -473,7 +421,7 @@ def main():
     if tb_enabled:
         # 提示使用父目录启动，这样可以对比多个实验
         tb_parent_dir = output_dir / tb_config.get("log_dir", "tensorboard")
-        print(f"\n启动TensorBoard查看训练:")
+        print("\n启动TensorBoard查看训练:")
         print(f"  单次运行: tensorboard --logdir={tensorboard_dir}")
         print(
             f"  对比多次: tensorboard --logdir={tb_parent_dir.parent.parent / 'tensorboard'}"

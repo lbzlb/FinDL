@@ -40,10 +40,10 @@ from tqdm import tqdm
 # 配置区域：所有参数都在这里设置
 # ============================================================================
 # 数据源路径
-SOURCE_DATA_DIR = 'src/server/data'
+SOURCE_DATA_DIR = 'data'
 
 # 输出路径
-OUTPUT_BASE_DIR = 'src/server/data'
+OUTPUT_BASE_DIR = 'data'
 
 # 时间范围筛选
 START_DATE = '2010-01-01'  # 数据开始时间

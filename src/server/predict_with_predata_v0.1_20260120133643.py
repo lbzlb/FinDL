@@ -167,8 +167,12 @@ def load_model_dynamically(model_dir: Path, device: str = 'cuda'):
     
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     
-    # 根据模型类型加载对应的模型类
-    models_path = project_root / "src" / "models" / model_version
+    # 根据模型类型选择仓库内模型源码目录（与 predict_and_evaluate 一致：TimeXer 使用 src/server/models）
+    if model_type == "timexer":
+        models_path = project_root / "src" / "server" / "models"
+        print("从 src/server/models 加载 TimeXer 源码")
+    else:
+        models_path = project_root / "src" / "models" / model_version
     
     if model_type == 'itransformer':
         itransformer_module = _load_module(models_path / "itransformer_decoder.py", "itransformer_decoder")

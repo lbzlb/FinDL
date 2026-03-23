@@ -1,8 +1,7 @@
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
-import shutil
-
 
 STEPS = [
     "src/local/crawl_index_data.py",

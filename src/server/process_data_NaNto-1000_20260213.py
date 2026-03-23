@@ -2,43 +2,27 @@ import torch
 import pandas as pd
 import yaml
 import argparse
-import sys
 from pathlib import Path
 from tqdm import tqdm
 import json
 from datetime import datetime
-import importlib.util
 import numpy as np
 import gc
 from typing import List, Optional, Dict
 from collections import Counter
 
+import rootutils
 
-# 添加项目路径
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
+project_root = rootutils.setup_root(
+    __file__, indicator=".project-root", pythonpath=True
+)
 
-
-# 动态导入模块
-def _load_module(module_path: Path, module_name: str):
-    """动态加载模块"""
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load module from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-# 导入所需模块
-
-data_utils_module = _load_module("src/server/code/data_utils.py", "data_utils")
-load_parquet_file = data_utils_module.load_parquet_file
-get_data_by_rows = data_utils_module.get_data_by_rows
-get_data_by_single_row = data_utils_module.get_data_by_single_row
-
-feature_selector_module = _load_module( "src/server/code/feature_selector.py", "feature_selector")
-FeatureSelector = feature_selector_module.FeatureSelector
+from src.server.utils.data_utils import (  # noqa: E402
+    get_data_by_rows,
+    get_data_by_single_row,
+    load_parquet_file,
+)
+from src.server.utils.feature_selector import FeatureSelector  # noqa: E402
 
 
 # ============================================================================
@@ -53,7 +37,7 @@ DEFAULT_CONFIG_VERSION = 'v0.1_20251212'
 
 # 默认索引文件路径配置（优先使用，如果设置为None则从config文件读取）
 # 设置为具体路径时，直接使用该路径；设置为None时，从config文件中读取
-DEFAULT_INDEX_DIR = 'src/server/data/roll_generate_index'
+DEFAULT_INDEX_DIR = 'data/roll_generate_index'
 DEFAULT_TRAIN_INDEX_FILE = 'train_samples_index.parquet'
 DEFAULT_VAL_INDEX_FILE = 'val_samples_index.parquet'
 # 如果希望从config文件读取索引路径，可以设置为None：
@@ -62,7 +46,7 @@ DEFAULT_VAL_INDEX_FILE = 'val_samples_index.parquet'
 # DEFAULT_VAL_INDEX_FILE = None
 
 # 默认输出目录（相对于项目根目录）
-DEFAULT_OUTPUT_DIR = 'src/server/data'
+DEFAULT_OUTPUT_DIR = 'data'
 # ============================================================================
 
 
@@ -204,8 +188,7 @@ def preprocess_dataset_by_company(
     
     # 合并索引文件（用于按公司分组）
     all_index_df = pd.concat([train_index_df, val_index_df], ignore_index=True)
-    all_index_df['split'] = ['train'] * len(train_index_df) + ['val'] * len(val_index_df)
-    
+
     # 按公司分组（使用source_file作为分组键）
     company_groups = all_index_df.groupby('source_file')
     num_companies = len(company_groups)

@@ -9,7 +9,7 @@ import json
 
 # ===== 配置区域（修改此处） =====
 # 数据文件夹路径
-PREPROCESSED_DATA_DIR = "src/server/data/preprocess_data_NaNto-1000"
+PREPROCESSED_DATA_DIR = "data/preprocess_data_NaNto-1000"
 
 # 输出文件夹（如果为None，则保存到数据源文件夹）
 OUTPUT_DIR = None  # 默认保存到PREPROCESSED_DATA_DIR
@@ -181,7 +181,10 @@ def extract_company_data(company_name, train_data, val_data, train_index_df, val
     # 【v0.3新增】统计日期提取情况
     dates_extracted_count = 0
     dates_failed_count = 0
-    
+
+    # 按源 parquet 路径缓存已读 DataFrame，避免同一公司多样本重复读盘
+    source_file_cache: dict = {}
+
     # 提取训练集样本
     if train_data is not None and train_index_df is not None:
         company_train_indices = train_index_df[train_index_df['company_name'] == company_name].index.tolist()
@@ -438,9 +441,21 @@ def main():
     
     # 加载数据
     train_data, val_data, train_index_df, val_index_df, feature_info = load_data_and_index(data_dir)
-    
+
+    # 从索引中收集待导出的公司（与 roll_generate_index 写入的 company_name 一致）
+    names: set[str] = set()
+    if train_index_df is not None and "company_name" in train_index_df.columns:
+        names.update(train_index_df["company_name"].dropna().astype(str).unique())
+    if val_index_df is not None and "company_name" in val_index_df.columns:
+        names.update(val_index_df["company_name"].dropna().astype(str).unique())
+    matched_companies = sorted(names)
+    if not matched_companies:
+        raise ValueError(
+            "无法导出：训练/验证索引为空，或索引中缺少 company_name 列。"
+        )
+
     extraction_results = {}
-    
+
     for company_name in matched_companies:
         print(f"\n处理公司: {company_name}")
         print("-" * 80)
