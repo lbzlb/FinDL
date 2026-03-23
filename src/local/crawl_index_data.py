@@ -62,8 +62,8 @@ def fetch_kline(session, secid):
 
 
 def main():
-    os.makedirs("src/local/data", exist_ok=True)
-    filename = "src/local/data/macro_indices.xlsx"
+    os.makedirs("data", exist_ok=True)
+    filename = "data/macro_indices.xlsx"
 
     with (
         requests.Session(impersonate="chrome120", timeout=10) as session,

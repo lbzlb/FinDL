@@ -50,8 +50,8 @@ v3.21 相比 v3.2 的改进：
 3. 运行脚本：python financial_data_mapper_v3.21_batch_period.py
 
 依赖文件：
-- 映射文件: 东方财富财务数据API映射最终版-陈俊同-20251030.xlsx
-- 股票列表文件: stock_list.csv 或 Excel文件
+- 映射文件: docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx
+- 股票列表文件: stock_list.csv 或 docs/股票代码汇总-陈俊同-20251118.xlsx 等 Excel
 - 数据获取模块: src/providers/eastmoney_v0.5.py
 """
 
@@ -1785,10 +1785,10 @@ def main():
     # ==================== 配置参数 ====================
     
     # 映射文件路径
-    mapping_file_path = "东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
+    mapping_file_path = "docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
     
     # 股票列表文件路径（支持CSV或Excel格式）
-    stock_list_file = "股票代码汇总-陈俊同-20251110.xlsx"  # "stock_list.csv" 或 "股票代码汇总-陈俊同-20251110.xlsx"
+    stock_list_file = "docs/股票代码汇总-陈俊同-20251118.xlsx"  # "stock_list.csv" 或 "docs/股票代码汇总-陈俊同-20251118.xlsx"
     
     # Excel文件的sheet名称或索引（仅当使用Excel文件时有效）
     sheet_name = 0

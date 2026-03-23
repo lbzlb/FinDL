@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-INDEX_FILE_PATH = "src/local/data/macro_indices.xlsx"  # 指数数据文件路径
+INDEX_FILE_PATH = "data/macro_indices.xlsx"  # 指数数据文件路径
 # 版本信息
 VERSION_SUFFIX = "v0.6"
 METADATA_VERSION = "v0.6_20260212185825"
@@ -533,8 +533,8 @@ def process_all_files(excel_dir, output_dir, index_data_dict):
 
 
 def main():
-    excel_dir = "src/local/data/stock"
-    output_dir = "src/local/data/processed"
+    excel_dir = "data/stock"
+    output_dir = "data/processed"
     index_file = INDEX_FILE_PATH
 
     print(f"Excel目录: {excel_dir}")

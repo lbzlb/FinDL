@@ -15,11 +15,11 @@ import rootutils
 PROJECT_ROOT = rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 # 股票列表及筛选
-STOCK_LIST_FILE = "src/local/data/股票代码汇总-陈俊同-20251118.xlsx"
+STOCK_LIST_FILE = "docs/股票代码汇总-陈俊同-20251118.xlsx"
 SHEET_NAME = 0                    # Excel sheet索引或名称
 
 # 财务映射文件
-MAPPING_FILE_PATH = "src/local/data/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
+MAPPING_FILE_PATH = "docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
 
 # K线时间范围默认值（格式："YYYYMMDD-YYYYMMDD" 或 None表示使用365天）
 # 注：如果API返回的数据不足设置的范围，则返回实际可用的数据量
@@ -35,7 +35,7 @@ PAUSE_AFTER_N_SUCCESS = 20        # 每成功处理n家公司后暂停（设为0
 PAUSE_MINUTES = 5                 # 暂停时长（分钟）
 
 # 输出与断点
-OUTPUT_BASE_DIR = "src/local/data/stock"
+OUTPUT_BASE_DIR = "data/stock"
 RESUME_PROGRESS_FILE = ''       # 若需续传，填入progress文件绝对或相对路径
 
 # 对齐设置
@@ -45,7 +45,7 @@ NOTICE_COL = "财报发布日期：财报公开日期、公告日期"
 
 
 # ---------- 静态导入依赖脚本 ----------
-SPIDER_DIR = "src/local/code/spider"
+SPIDER_DIR = "src/local/spider"
 sys.path.append(SPIDER_DIR)
 sys.path.append(f"{SPIDER_DIR}/providers")
 

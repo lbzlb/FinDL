@@ -5,12 +5,12 @@ import shutil
 
 
 STEPS = [
-    # "src/local/code/crawl_index_data.py",
-    # "src/local/code/crawl_stock_data.py",
-    "src/local/code/merge_stock_index.py",
+    "src/local/crawl_index_data.py",
+    "src/local/crawl_stock_data.py",
+    "src/local/merge_stock_index.py",
 ]
 
-PROCESSED_DIR = Path("src/local/data/processed")
+PROCESSED_DIR = Path("data/processed")
 
 
 for step in STEPS:
