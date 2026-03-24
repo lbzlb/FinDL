@@ -4,8 +4,8 @@ from datetime import datetime
 from pathlib import Path
 
 STEPS = [
-    "src/local/crawl_index_data.py",
-    "src/local/crawl_stock_data.py",
+    # "src/local/crawl_index_data.py",
+    # "src/local/crawl_stock_data.py",
     "src/local/merge_stock_index.py",
 ]
 
