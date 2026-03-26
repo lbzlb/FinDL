@@ -35,7 +35,7 @@ import pandas as pd
 # 股票列表及筛选
 STOCK_LIST_FILE = "docs\股票代码汇总-陈俊同-20251118.xlsx"
 SHEET_NAME = 0                    # Excel sheet索引或名称
-FILTER_BY_COLUMN = "处理"          # 为None则不筛选
+FILTER_BY_COLUMN = None        # 为None则不筛选
 FILTER_CODES = None               # 如 ['600519', '00700.HK']，为None处理全部
 
 # 财务映射文件
@@ -55,7 +55,7 @@ MAX_CONSECUTIVE_FAILURES = 5      # 连续失败判定IP封禁
 
 # 批量暂停控制（每成功n家后暂停m分钟，避免过于频繁请求）
 PAUSE_AFTER_N_SUCCESS = 20        # 每成功处理n家公司后暂停（设为0则不启用）
-PAUSE_MINUTES = 20                 # 暂停时长（分钟）
+PAUSE_MINUTES = 5                # 暂停时长（分钟）
 
 # 输出与断点
 OUTPUT_BASE_DIR = os.path.join("data", "stock")
