@@ -45,10 +45,10 @@ from typing import List, Dict, Tuple
 SCRIPT_VERSION = 'v0.01'
 
 # 默认输入目录（原始parquet数据文件夹）
-DEFAULT_SOURCE_DIR = 'data'
+DEFAULT_SOURCE_DIR = '/data/project_20251211/data/raw/processed_data_20260308'
 
 # 默认输出目录
-DEFAULT_OUTPUT_DIR = 'data'
+DEFAULT_OUTPUT_DIR = '/data/project_20251211/data/pre_data'
 
 # 序列长度（最近N个交易日）
 DEFAULT_SEQ_LEN = 500

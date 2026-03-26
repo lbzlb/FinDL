@@ -40,10 +40,10 @@ from tqdm import tqdm
 # 配置区域：所有参数都在这里设置
 # ============================================================================
 # 数据源路径
-SOURCE_DATA_DIR = 'data'
+SOURCE_DATA_DIR = '/data/project_20251211/data/raw/processed_data_20260308'
 
 # 输出路径
-OUTPUT_BASE_DIR = 'data'
+OUTPUT_BASE_DIR = '/data/project_20251211/data/processed'
 
 # 时间范围筛选
 START_DATE = '2010-01-01'  # 数据开始时间
@@ -126,7 +126,8 @@ class RollingDatasetGenerator:
     
     def _create_output_dir(self):
         """创建输出目录"""
-        dir_name = 'roll_generate_index'
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        dir_name = f'roll_generate_index_v0.7_{timestamp}'
         output_dir = self.output_base_dir / dir_name
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir

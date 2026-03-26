@@ -5,8 +5,8 @@ from pathlib import Path
 
 STEPS = [
     # "src/local/crawl_index_data.py",
-    # "src/local/crawl_stock_data.py",
-    "src/local/merge_stock_index.py",
+    "src/local/financial&candle_data_v0.3.py",
+    "src/local/preprocessing_data_v0.6_20260212185825.py",
 ]
 
 PROCESSED_DIR = Path("data/processed")

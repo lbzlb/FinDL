@@ -50,8 +50,8 @@ v3.21 相比 v3.2 的改进：
 3. 运行脚本：python financial_data_mapper_v3.21_batch_period.py
 
 依赖文件：
-- 映射文件: docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx
-- 股票列表文件: stock_list.csv 或 docs/股票代码汇总-陈俊同-20251118.xlsx 等 Excel
+- 映射文件: 东方财富财务数据API映射最终版-陈俊同-20251030.xlsx
+- 股票列表文件: stock_list.csv 或 Excel文件
 - 数据获取模块: src/providers/eastmoney_v0.5.py
 """
 
@@ -64,27 +64,26 @@ from datetime import datetime
 import pandas as pd
 from collections import defaultdict
 
-# 添加src目录到Python路径
+# 添加当前目录到Python路径
 sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
 # 导入改进版数据获取函数
 # 注意：Python导入时，文件名中的点(.)需要改为下划线(_)
 import importlib.util
 
-# 动态导入 eastmoney_financial.py 模块（支持周期参数 + 港股NOTICE_DATE API获取）
+# 动态导入 eastmoney_v0.5.py 模块（支持周期参数 + 港股NOTICE_DATE API获取）
 spec = importlib.util.spec_from_file_location(
-    "eastmoney_financial",
-    os.path.join(os.path.dirname(__file__), 'eastmoney_financial.py')
+    "eastmoney_v0_5",
+    os.path.join(os.path.dirname(__file__), 'eastmoney_v0.5.py')
 )
-eastmoney_financial = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(eastmoney_financial)
+eastmoney_v0_5 = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(eastmoney_v0_5)
 
 # 获取需要的函数（v0.5支持周期参数 + 港股NOTICE_DATE API获取，返回 (DataFrame, dict)）
-get_full_financial_data_a = eastmoney_financial.get_full_financial_data_a
-get_full_financial_data_hk = eastmoney_financial.get_full_financial_data_hk
-get_full_financial_data_us = eastmoney_financial.get_full_financial_data_us
-get_hk_financial_report_dates = eastmoney_financial.get_hk_financial_report_dates  # v3.21新增：港股NOTICE_DATE API获取
+get_full_financial_data_a = eastmoney_v0_5.get_full_financial_data_a
+get_full_financial_data_hk = eastmoney_v0_5.get_full_financial_data_hk
+get_full_financial_data_us = eastmoney_v0_5.get_full_financial_data_us
+get_hk_financial_report_dates = eastmoney_v0_5.get_hk_financial_report_dates  # v3.21新增：港股NOTICE_DATE API获取
 
 
 def calculate_notice_date_for_market(report_date_str, market_type):
@@ -1785,10 +1784,10 @@ def main():
     # ==================== 配置参数 ====================
     
     # 映射文件路径
-    mapping_file_path = "docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
+    mapping_file_path = "东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
     
     # 股票列表文件路径（支持CSV或Excel格式）
-    stock_list_file = "docs/股票代码汇总-陈俊同-20251118.xlsx"  # "stock_list.csv" 或 "docs/股票代码汇总-陈俊同-20251118.xlsx"
+    stock_list_file = "股票代码汇总-陈俊同-20251110.xlsx"  # "stock_list.csv" 或 "股票代码汇总-陈俊同-20251110.xlsx"
     
     # Excel文件的sheet名称或索引（仅当使用Excel文件时有效）
     sheet_name = 0

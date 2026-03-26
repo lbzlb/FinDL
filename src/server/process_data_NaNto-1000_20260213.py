@@ -1,28 +1,79 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+数据预处理脚本 - 保持原始数据不变，仅将NaN和0替换为-1000
+版本: NaNto-1000
+日期: 20260213
+
+功能:
+1. 读取索引文件和原始数据
+2. 按公司分组处理所有样本
+3. 对所有特征列：将NaN填充为0，再将所有0值替换为-1000
+4. 不做任何归一化处理，保留原始数据的真实值
+5. 保存为.pt文件（包含tensor和元数据）
+
+核心特点:
+- 不做任何归一化，保持原始值不变
+- NaN和0值统一标记为-1000（缺失值标记）
+- 继承v1.0的内存优化策略（torch.stack + gc.collect + malloc_trim）
+- 按公司分组处理，避免一次性加载所有数据
+
+使用方法:
+    # 最简单的方式：直接运行（使用代码中的所有默认设置）
+    python src/data/parquet_to_tensor/process_data_NaNto-1000_20260213.py
+    
+    # 或者通过命令行参数覆盖默认设置（可选）
+    python src/data/parquet_to_tensor/process_data_NaNto-1000_20260213.py --config_version v0.1_20251212
+
+注意:
+    - 所有默认配置都在代码顶部定义（DEFAULT_CONFIG_VERSION等）
+    - 如需修改，直接编辑代码中的默认值即可，无需命令行参数
+    - 命令行参数仅用于临时覆盖默认设置
+"""
+
 import torch
 import pandas as pd
 import yaml
 import argparse
+import sys
 from pathlib import Path
 from tqdm import tqdm
 import json
 from datetime import datetime
+import importlib.util
 import numpy as np
 import gc
 from typing import List, Optional, Dict
 from collections import Counter
 
-import rootutils
 
-project_root = rootutils.setup_root(
-    __file__, indicator=".project-root", pythonpath=True
-)
+# 添加项目路径
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-from src.server.utils.data_utils import (  # noqa: E402
-    get_data_by_rows,
-    get_data_by_single_row,
-    load_parquet_file,
-)
-from src.server.utils.feature_selector import FeatureSelector  # noqa: E402
+
+# 动态导入模块
+def _load_module(module_path: Path, module_name: str):
+    """动态加载模块"""
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module from {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# 导入所需模块
+utils_path = project_root / "src" / "utils" / "v0.1_20251212"
+data_path = project_root / "src" / "data" / "v0.1_20251212"
+
+data_utils_module = _load_module(utils_path / "data_utils.py", "data_utils")
+load_parquet_file = data_utils_module.load_parquet_file
+get_data_by_rows = data_utils_module.get_data_by_rows
+get_data_by_single_row = data_utils_module.get_data_by_single_row
+
+feature_selector_module = _load_module(data_path / "feature_selector.py", "feature_selector")
+FeatureSelector = feature_selector_module.FeatureSelector
 
 
 # ============================================================================
@@ -37,7 +88,7 @@ DEFAULT_CONFIG_VERSION = 'v0.1_20251212'
 
 # 默认索引文件路径配置（优先使用，如果设置为None则从config文件读取）
 # 设置为具体路径时，直接使用该路径；设置为None时，从config文件中读取
-DEFAULT_INDEX_DIR = 'data/roll_generate_index'
+DEFAULT_INDEX_DIR = '/data/project_20251211/data/processed/roll_generate_index_v0.7_20260325_165322'
 DEFAULT_TRAIN_INDEX_FILE = 'train_samples_index.parquet'
 DEFAULT_VAL_INDEX_FILE = 'val_samples_index.parquet'
 # 如果希望从config文件读取索引路径，可以设置为None：
@@ -46,7 +97,7 @@ DEFAULT_VAL_INDEX_FILE = 'val_samples_index.parquet'
 # DEFAULT_VAL_INDEX_FILE = None
 
 # 默认输出目录（相对于项目根目录）
-DEFAULT_OUTPUT_DIR = 'data'
+DEFAULT_OUTPUT_DIR = 'data/processed'
 # ============================================================================
 
 
@@ -188,7 +239,8 @@ def preprocess_dataset_by_company(
     
     # 合并索引文件（用于按公司分组）
     all_index_df = pd.concat([train_index_df, val_index_df], ignore_index=True)
-
+    all_index_df['split'] = ['train'] * len(train_index_df) + ['val'] * len(val_index_df)
+    
     # 按公司分组（使用source_file作为分组键）
     company_groups = all_index_df.groupby('source_file')
     num_companies = len(company_groups)
@@ -458,7 +510,8 @@ def main():
     print("=" * 80)
     
     # 加载配置
-    dataset_config_path = "src/server/config/dataset_config.yaml"
+    config_dir = project_root / "configs" / config_version
+    dataset_config_path = config_dir / "dataset_config.yaml"
     
     print(f"\n加载配置: {dataset_config_path}")
     dataset_config = load_config(dataset_config_path)
@@ -493,7 +546,8 @@ def main():
     )
     
     # 创建输出目录
-    output_dir_path = project_root / output_dir / f"preprocess_data_{SCRIPT_VERSION}"
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    output_dir_path = project_root / output_dir / f"preprocess_data_{SCRIPT_VERSION}_{timestamp}"
     output_dir_path.mkdir(parents=True, exist_ok=True)
     print(f"\n输出目录: {output_dir_path}")
     

@@ -206,7 +206,7 @@ def stock_financial_us_analysis_indicator_em(symbol: str = "TSLA", indicator: st
 
 if __name__ == "__main__":
     # 批量获取指定股票的财务指标数据
-    df = pd.read_excel("docs/股票代码汇总-陈俊同-20251118.xlsx")
+    df = pd.read_excel("股票代码汇总-陈俊同-20251110.xlsx")
     code_list = df[df['市场']=="美股"]['股票代码'].tolist()
 
     for stock_code in ["AXP", "AIG", "ACGL", "FRT", "HES", "MTB", "MKTX", "PFG", "UNM", "VTR"]:

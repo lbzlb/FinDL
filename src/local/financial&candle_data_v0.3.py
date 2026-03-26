@@ -1,25 +1,49 @@
+#!/Users/juntongchen/Downloads/财务数据AI训练_测试代码_20251017/mac-test-venv/bin/python
+# -*- coding: utf-8 -*-
+"""
+综合财务 + K线数据抓取脚本 v0.3
+
+功能：
+1. 读取股票列表，逐家公司拉取财务数据与日K/周K数据
+2. 每家公司生成一个独立Excel，包含财务数据、日K、周K、财报×日K对齐结果
+3. 自动生成company_index索引文件与progress断点文件，支持断点续传
+4. 财报-日K对齐：以"财报发布日期：财报公开日期、公告日期"为基准，向前填充覆盖所有日K日期
+
+v0.3 更新：
+- 切换到 eastmoney_v0.7 模块（增强请求头 + 详细错误日志）
+- 详细记录所有K线获取失败原因，保存到独立日志文件
+- 在公司索引中增加"日K失败原因"和"周K失败原因"字段
+- 连续5次K线获取失败则停止（已在v0.2实现，v0.3保持）
+- 成功后失败计数归零（已在v0.2实现，v0.3保持）
+- 批量暂停控制：每成功处理n家公司后，暂停m分钟（可配置）
+- 财务数据失败跳过策略：当财务数据获取失败时，直接跳过该公司的K线数据获取
+"""
+
 import os
 import sys
 import json
 import time
 import random
 import traceback
+import importlib.util
 from datetime import datetime, timedelta
 
 import pandas as pd
-import rootutils
 
 
 # =========================== 配置区域（可修改） ===========================
-# 项目根目录（.../FinDL）
-PROJECT_ROOT = rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
 # 股票列表及筛选
-STOCK_LIST_FILE = "docs/股票代码汇总-陈俊同-20251118.xlsx"
+STOCK_LIST_FILE = "docs\股票代码汇总-陈俊同-20251118.xlsx"
 SHEET_NAME = 0                    # Excel sheet索引或名称
+FILTER_BY_COLUMN = "处理"          # 为None则不筛选
+FILTER_CODES = None               # 如 ['600519', '00700.HK']，为None处理全部
 
 # 财务映射文件
-MAPPING_FILE_PATH = "docs/东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
+MAPPING_FILE_PATH = "docs\东方财富财务数据API映射最终版-陈俊同-20251030.xlsx"
+
+# K线抓取控制
+FETCH_DAILY = True
+FETCH_WEEKLY = True
 
 # K线时间范围默认值（格式："YYYYMMDD-YYYYMMDD" 或 None表示使用365天）
 # 注：如果API返回的数据不足设置的范围，则返回实际可用的数据量
@@ -27,15 +51,14 @@ DEFAULT_DAILY_RANGE = "20200101-20251115"    # 日K默认范围
 DEFAULT_WEEKLY_RANGE = "20200101-20251115"   # 周K默认范围
 
 DELAY_SECONDS = (15, 20)          # 每次请求随机延迟区间
-KLINE_GAP_SECONDS = (5, 10)        # 日K与周K之间的随机延迟区间
 MAX_CONSECUTIVE_FAILURES = 5      # 连续失败判定IP封禁
 
 # 批量暂停控制（每成功n家后暂停m分钟，避免过于频繁请求）
 PAUSE_AFTER_N_SUCCESS = 20        # 每成功处理n家公司后暂停（设为0则不启用）
-PAUSE_MINUTES = 5                 # 暂停时长（分钟）
+PAUSE_MINUTES = 20                 # 暂停时长（分钟）
 
 # 输出与断点
-OUTPUT_BASE_DIR = "data/stock"
+OUTPUT_BASE_DIR = os.path.join("data", "stock")
 RESUME_PROGRESS_FILE = ''       # 若需续传，填入progress文件绝对或相对路径
 
 # 对齐设置
@@ -44,14 +67,21 @@ NOTICE_COL = "财报发布日期：财报公开日期、公告日期"
 # ========================================================================
 
 
-# ---------- 静态导入依赖脚本 ----------
-SPIDER_DIR = "src/local/spider"
-sys.path.append(SPIDER_DIR)
-sys.path.append(f"{SPIDER_DIR}/providers")
+# ---------- 动态导入依赖脚本 ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-import financial_data_mapper as financial_module
-import eastmoney_kline as eastmoney_module
+# financial_data_mapper_v3.21_batch_period.py
+_financial_module_path = os.path.join(BASE_DIR, "spider", "financial_data_mapper_v3.21_batch_period.py")
+_financial_spec = importlib.util.spec_from_file_location("financial_mapper_v321", _financial_module_path)
+financial_module = importlib.util.module_from_spec(_financial_spec)
+_financial_spec.loader.exec_module(financial_module)
 
+# eastmoney_v0.7（用于日K/周K）
+sys.path.append(os.path.join(BASE_DIR, "spider"))
+_eastmoney_path = os.path.join(BASE_DIR, "spider", "eastmoney_v0.7.py")
+_eastmoney_spec = importlib.util.spec_from_file_location("eastmoney_v0_7", _eastmoney_path)
+eastmoney_module = importlib.util.module_from_spec(_eastmoney_spec)
+_eastmoney_spec.loader.exec_module(eastmoney_module)
 get_historical_data = eastmoney_module.get_historical_data
 
 
@@ -61,7 +91,7 @@ class IPBlockedException(Exception):
 
 def ensure_output_dir(base_dir):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = base_dir
+    out_dir = os.path.join(base_dir, f"download_financial&candle_v0.3_{timestamp}")
     os.makedirs(out_dir, exist_ok=True)
     return out_dir, timestamp
 
@@ -92,11 +122,6 @@ def get_random_delay():
     if isinstance(DELAY_SECONDS, (list, tuple)):
         return random.uniform(float(DELAY_SECONDS[0]), float(DELAY_SECONDS[1]))
     return float(DELAY_SECONDS)
-
-def get_kline_gap_delay():
-    if isinstance(KLINE_GAP_SECONDS, (list, tuple)):
-        return random.uniform(float(KLINE_GAP_SECONDS[0]), float(KLINE_GAP_SECONDS[1]))
-    return float(KLINE_GAP_SECONDS)
 
 
 
@@ -151,6 +176,9 @@ class CandleFetcher:
                 - count: 数据行数（失败时为0）
                 - error_message: 失败原因（成功时为空字符串）
         """
+        if not (FETCH_DAILY or FETCH_WEEKLY):
+            return None, 0, ""
+
         parsed = parse_date_range(date_range) if date_range else None
         if parsed is None:
             parsed = parse_date_range(None)
@@ -270,7 +298,7 @@ class ProgressManager:
     def __init__(self, output_dir, timestamp, resume_file=None):
         self.output_dir = output_dir
         self.timestamp = timestamp
-        self.progress_file = os.path.join(output_dir, "progress.json")
+        self.progress_file = os.path.join(output_dir, f"progress_{timestamp}.json")
         self.processed_codes = set()
         self.total_processed = 0
         self.total_success = 0
@@ -335,10 +363,10 @@ class CompanyProcessor:
             self.timestamp = self.progress.timestamp
             self.session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # 续传时加载已有的索引记录
-            index_file = os.path.join(self.output_dir, "company_index.csv")
+            index_file = os.path.join(self.output_dir, f"company_index_{self.timestamp}.xlsx")
             if os.path.exists(index_file):
                 try:
-                    existing_index = pd.read_csv(index_file, encoding="utf-8-sig")
+                    existing_index = pd.read_excel(index_file, sheet_name="公司索引")
                     self.index_records = existing_index.to_dict("records")
                     print(f"✓ 已加载 {len(self.index_records)} 条历史索引记录")
                 except Exception as e:
@@ -363,6 +391,15 @@ class CompanyProcessor:
             converters["公司名称"] = clean_name
         
         df = pd.read_excel(STOCK_LIST_FILE, sheet_name=SHEET_NAME, converters=converters)
+        if FILTER_BY_COLUMN and FILTER_BY_COLUMN in df.columns:
+            df = df[df[FILTER_BY_COLUMN].notna()]
+        if FILTER_CODES:
+            if isinstance(FILTER_CODES, (list, tuple, set)):
+                codes_iter = FILTER_CODES
+            else:
+                codes_iter = [FILTER_CODES]
+            filter_set = {str(code).strip() for code in codes_iter}
+            df = df[df["股票代码"].astype(str).str.strip().isin(filter_set)]
         if "市场类型" not in df.columns:
             df["市场类型"] = df["股票代码"].apply(financial_module.detect_market_type)
         df = df.reset_index(drop=True)
@@ -426,6 +463,7 @@ class CompanyProcessor:
             self.progress.total_processed += 1
             self.progress.processed_codes.add(stock_code)
             self.progress.save()
+            # 索引已在 process_single_company 内部保存，此处不再重复调用
 
         elapsed = (time.time() - start_time) / 60
         print(f"\n处理完成！耗时 {elapsed:.1f} 分钟")
@@ -466,35 +504,38 @@ class CompanyProcessor:
 
             daily_df, daily_count = (None, 0)
             weekly_df, weekly_count = (None, 0)
-            
-            delay = get_kline_gap_delay()
-            print("  📊 获取日K数据...")
-            # 如果Excel中没有指定范围，使用配置的默认值
-            actual_daily_range = daily_range if (pd.notna(daily_range) and daily_range) else DEFAULT_DAILY_RANGE
-            daily_df, daily_count, daily_error = self.fetch_candles(stock_code, market, "daily", actual_daily_range)
-            if daily_df is not None and not daily_df.empty:
-                print(f"    ✓ 日K: {daily_count} 条记录")
-            else:
-                print("    ✗ 日K数据为空")
 
-            delay = get_kline_gap_delay()
-            print(f"  ⏱️  等待 {delay:.1f} 秒后获取周K数据...")
-            time.sleep(delay)
-            print("  📊 获取周K数据...")
-            # 如果Excel中没有指定范围，使用配置的默认值
-            actual_weekly_range = weekly_range if (pd.notna(weekly_range) and weekly_range) else DEFAULT_WEEKLY_RANGE
-            weekly_df, weekly_count, weekly_error = self.fetch_candles(stock_code, market, "weekly", actual_weekly_range)
-            if weekly_df is not None and not weekly_df.empty:
-                print(f"    ✓ 周K: {weekly_count} 条记录")
-            else:
-                print("    ✗ 周K数据为空")
+            if FETCH_DAILY:
+                print("  📊 获取日K数据...")
+                # 如果Excel中没有指定范围，使用配置的默认值
+                actual_daily_range = daily_range if (pd.notna(daily_range) and daily_range) else DEFAULT_DAILY_RANGE
+                daily_df, daily_count, daily_error = self.fetch_candles(stock_code, market, "daily", actual_daily_range)
+                if daily_df is not None and not daily_df.empty:
+                    print(f"    ✓ 日K: {daily_count} 条记录")
+                else:
+                    print("    ✗ 日K数据为空")
 
-            aligned_df = align_financial_with_daily(fin_df, daily_df)
-            if aligned_df is not None and not aligned_df.empty:
-                latest_date = aligned_df["日期"].iloc[0]
-                print(f"  🔗 财报×日K对齐完成：{len(aligned_df)} 行（最新日期 {latest_date}）")
-            else:
-                print("  ⚠ 财报×日K对齐数据为空")
+            if FETCH_WEEKLY:
+                if FETCH_DAILY:
+                    delay = get_random_delay()
+                    print(f"  ⏱️  等待 {delay:.1f} 秒后获取周K数据...")
+                    time.sleep(delay)
+                print("  📊 获取周K数据...")
+                # 如果Excel中没有指定范围，使用配置的默认值
+                actual_weekly_range = weekly_range if (pd.notna(weekly_range) and weekly_range) else DEFAULT_WEEKLY_RANGE
+                weekly_df, weekly_count, weekly_error = self.fetch_candles(stock_code, market, "weekly", actual_weekly_range)
+                if weekly_df is not None and not weekly_df.empty:
+                    print(f"    ✓ 周K: {weekly_count} 条记录")
+                else:
+                    print("    ✗ 周K数据为空")
+
+            aligned_df = align_financial_with_daily(fin_df, daily_df) if FETCH_DAILY else pd.DataFrame()
+            if FETCH_DAILY:
+                if aligned_df is not None and not aligned_df.empty:
+                    latest_date = aligned_df["日期"].iloc[0]
+                    print(f"  🔗 财报×日K对齐完成：{len(aligned_df)} 行（最新日期 {latest_date}）")
+                else:
+                    print("  ⚠ 财报×日K对齐数据为空")
 
             excel_path = self.save_company_excel(
                 sequence=sequence,
@@ -601,15 +642,17 @@ class CompanyProcessor:
         return df, count, error_msg
 
     def save_company_excel(self, sequence, company_name, stock_code, fin_df, daily_df, weekly_df, aligned_df):
-        file_name = f"{sequence}_{company_name}_{stock_code}.xlsx"
+        # 生成当前保存时刻的时间戳
+        current_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"{sequence}_{company_name}_{stock_code}_{current_timestamp}.xlsx"
         safe_name = "".join(c if c not in r'\/:*?"<>|' else "_" for c in file_name)
         file_path = os.path.join(self.output_dir, safe_name)
 
         with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
             fin_df.to_excel(writer, sheet_name="财务数据", index=False)
-            if daily_df is not None and not daily_df.empty:
+            if FETCH_DAILY and daily_df is not None and not daily_df.empty:
                 daily_df.to_excel(writer, sheet_name="日K数据", index=False)
-            if weekly_df is not None and not weekly_df.empty:
+            if FETCH_WEEKLY and weekly_df is not None and not weekly_df.empty:
                 weekly_df.to_excel(writer, sheet_name="周K数据", index=False)
             if aligned_df is not None and not aligned_df.empty:
                 aligned_df.to_excel(writer, sheet_name="财报_日K对齐", index=False)
@@ -670,8 +713,9 @@ class CompanyProcessor:
         if not self.index_records:
             return
         index_df = pd.DataFrame(self.index_records)
-        index_file = os.path.join(self.output_dir, "company_index.csv")
-        index_df.to_csv(index_file, index=False, encoding="utf-8-sig")
+        index_file = os.path.join(self.output_dir, f"company_index_{self.timestamp}.xlsx")
+        with pd.ExcelWriter(index_file, engine="openpyxl") as writer:
+            index_df.to_excel(writer, sheet_name="公司索引", index=False)
         print(f"  ✓ 索引已更新：{index_file}")
 
     def save_failure_log(self):
@@ -681,9 +725,10 @@ class CompanyProcessor:
             print("\n✓ 无K线获取失败记录")
             return
         
-        log_file = os.path.join(self.output_dir, "kline_failure_log.csv")
+        log_file = os.path.join(self.output_dir, f"kline_failure_log_{self.timestamp}.xlsx")
         try:
-            failure_df.to_csv(log_file, index=False, encoding="utf-8-sig")
+            with pd.ExcelWriter(log_file, engine="openpyxl") as writer:
+                failure_df.to_excel(writer, sheet_name="K线失败日志", index=False)
             print(f"\n✓ K线失败日志已保存：{log_file}")
             print(f"  共记录 {len(failure_df)} 次失败")
         except Exception as e:

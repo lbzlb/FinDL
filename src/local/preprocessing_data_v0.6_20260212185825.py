@@ -1,3 +1,28 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+财务数据预处理脚本 v0.6_20260212185825
+
+功能：
+1. 从1400+个Excel文件中提取"财报_日K对齐"sheet的数据
+2. 提取公司标识信息（从文件名和第一行数据）
+3. 删除不需要的列（股票代码、财报数据截止日期、匹配财报公告日期）
+4. 使用每家公司的数据单独导出Parquet，文件名与原Excel保持一致
+5. 将货币单位统一映射为数值，方便训练
+6. 填充数值列的缺失值为0（排除标识列）
+7. 生成元数据、公司映射和处理日志
+8. 【v0.4新增】根据股票市场类型（A股/港股/美股）添加对应的指数数据
+9. 【v0.4新增】确保股票代码和货币单位列填充所有行
+10. 【v0.5新增】保持Excel原始列顺序，公司标识列放在最前面，指数列放在最后面
+11. 【v0.6修改】调整货币单位映射值：人民币=0.1, 美元=0.3, 港币=-0.1
+
+输出：
+- {原Excel文件名}.parquet: 每家公司的预处理数据（包含指数数据）
+- data_metadata_v0.6.json: 元数据信息
+- company_mapping_v0.6.json: 公司映射表
+- processing_log_v0.6.txt: 处理日志
+"""
+
 import re
 import json
 import pandas as pd
@@ -5,15 +30,14 @@ from datetime import datetime
 from pathlib import Path
 
 # =========================== 配置区域 ===========================
-# 以下路径均相对于项目根目录（FinDL/），与 crawl_stock_data / crawl_index_data 一致
-# Excel 文件所在目录（抓取脚本输出 data/stock）
-EXCEL_DIR = "data/stock"
+# Excel文件所在目录
+EXCEL_DIR = "data\stock"
 
-# 预处理 Parquet / 元数据输出目录
-OUTPUT_DIR = "data/processed"
+# 输出目录
+OUTPUT_DIR = "data\processed"
 
-# 指数数据文件（crawl_index_data 生成 data/macro_indices.xlsx）
-INDEX_FILE_PATH = "data/macro_indices.xlsx"
+# 指数数据文件路径
+INDEX_FILE_PATH = "data\macro_indices.xlsx"
 
 # 版本信息
 VERSION_SUFFIX = "v0.6"
@@ -87,7 +111,11 @@ def determine_market(stock_code):
     if len(code_str) == 5 and code_str.isdigit():
         return '港股'
     
-    # 美股：含字母的代码（如 TSM、BRK.B）；纯数字已在上面分支处理
+    # 美股判断：全英文（且不是A股/港股的格式）
+    if code_str.isalpha():
+        return '美股'
+    
+    # 如果包含字母但不是全英文，可能是美股（如BRK.B）
     if any(c.isalpha() for c in code_str):
         return '美股'
     
@@ -200,13 +228,14 @@ def merge_index_data(company_df, market_type, index_data_dict):
     company_df['日期'] = pd.to_datetime(company_df['日期'], errors='coerce')
     
     merged_df = company_df.copy()
-
+    merged_count = 0
+    
     for index_name in indices_to_merge:
         if index_name not in index_data_dict:
             continue
-
+        
         index_df = index_data_dict[index_name].copy()
-
+        
         # 左连接：保留公司的所有日期
         merged_df = pd.merge(
             merged_df,
@@ -214,6 +243,7 @@ def merge_index_data(company_df, market_type, index_data_dict):
             on='日期',
             how='left'
         )
+        merged_count += 1
     
     # 填充指数列的缺失值为0
     # 识别新增的指数列（列名包含指数名称）
@@ -233,15 +263,20 @@ def merge_index_data(company_df, market_type, index_data_dict):
 def parse_filename(filename):
     """
     解析文件名，提取公司信息
-    格式: {序号}_{公司名}_{股票代码}.xlsx
-    例如: 1017_Cadence_CDNS.xlsx
+    格式: {序号}_{公司名}_{股票代码}_{时间戳}.xlsx
+    例如: 0001_中国铝业_601600_20251115_235412.xlsx
     """
-    match = re.match(r'^(\d+)_(.+?)_(.+?)\.xlsx$', filename)
+    match = re.match(r'^(\d+)_(.+?)_(.+?)_(\d{8}_\d{6})\.xlsx$', filename)
     if match:
+        sequence_id = int(match.group(1))
+        company_name = match.group(2)
+        stock_code = match.group(3)
+        timestamp = match.group(4)
         return {
-            'sequence_id': int(match.group(1)),
-            'company_name': match.group(2),
-            'stock_code': match.group(3),
+            'sequence_id': sequence_id,
+            'company_name': company_name,
+            'stock_code': stock_code,
+            'timestamp': timestamp
         }
     return None
 
@@ -258,10 +293,15 @@ def extract_company_info_from_data(df, filename_info):
             if col in df.columns:
                 value = df[col].iloc[0]
                 if pd.notna(value):
+                    # 统一key名称：股票代码 -> stock_code，货币单位 -> 货币单位
                     if col == "股票代码":
-                        company_info["stock_code"] = str(value)
+                        key = "stock_code"
                     elif col == "货币单位":
-                        company_info["货币单位"] = str(value)
+                        key = "货币单位"
+                    else:
+                        # 其他列：将列名转换为key（去掉空格，转为小写）
+                        key = col.replace(' ', '_').lower()
+                    company_info[key] = str(value)
     
     return company_info
 
@@ -779,11 +819,11 @@ def process_all_files(excel_dir, output_dir, index_data_dict):
 
 def main():
     """主函数"""
-    # 项目根目录：src/local/merge_stock_index.py -> 上两级到 FinDL/
-    project_root = Path(__file__).resolve().parent.parent.parent
-    excel_dir = project_root / EXCEL_DIR
-    output_dir = project_root / OUTPUT_DIR
-    index_file = project_root / INDEX_FILE_PATH
+    # 获取脚本所在目录
+    script_dir = Path(__file__).parent.parent
+    excel_dir = script_dir / EXCEL_DIR
+    output_dir = script_dir / OUTPUT_DIR
+    index_file = script_dir / INDEX_FILE_PATH
     
     if not excel_dir.exists():
         print(f"错误: Excel目录不存在: {excel_dir}")

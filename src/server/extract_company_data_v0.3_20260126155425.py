@@ -1,3 +1,24 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+公司数据提取脚本
+版本: v0.3
+日期: 20260126155425
+
+功能:
+1. 从预处理数据中提取指定公司的训练集和验证集数据
+2. 为每家公司生成独立的Excel文件
+3. 每个样本（输入输出对）生成一个独立的sheet
+4. 支持灵活配置数据源和目标公司
+5. 【v0.2新增】使用原始特征名作为列名，而不是编号
+6. 【v0.3新增】从源文件提取真实日期，替代timestep编号
+
+使用方法:
+    1. 修改下面的配置区域
+    2. 运行: conda activate /data/project_20251211/.conda_env
+    3. 运行: python extract_company_data_v0.3_20260126155425.py
+"""
+
 import torch
 import pandas as pd
 import numpy as np
@@ -6,10 +27,21 @@ from datetime import datetime
 from tqdm import tqdm
 import re
 import json
+from collections import OrderedDict
 
 # ===== 配置区域（修改此处） =====
 # 数据文件夹路径
-PREPROCESSED_DATA_DIR = "data/preprocess_data_NaNto-1000"
+PREPROCESSED_DATA_DIR = "/data/project_20251211/data/processed/preprocess_data_NaNto-1000_20260325165454"
+
+# 需要提取的公司名称列表
+TARGET_COMPANIES = [
+    "贵州茅台",
+    "寒武纪-U",
+    "TENCENT騰訊控股"
+]
+
+# 是否使用模糊匹配（如果公司名称可能有细微差异）
+USE_FUZZY_MATCH = False
 
 # 输出文件夹（如果为None，则保存到数据源文件夹）
 OUTPUT_DIR = None  # 默认保存到PREPROCESSED_DATA_DIR
@@ -20,6 +52,9 @@ MAX_SHEETS_PER_FILE = 500
 # 【v0.3新增】是否从源文件提取真实日期（如果为False，使用timestep编号）
 EXTRACT_REAL_DATES = True
 
+# 【v0.3新增】源文件缓存大小（同时缓存多少个源文件，避免内存溢出）
+SOURCE_FILE_CACHE_SIZE = 10
+# ================================
 
 
 def load_dates_from_source(source_file_path, start_row, end_row, cache_dict):
@@ -53,7 +88,10 @@ def load_dates_from_source(source_file_path, start_row, end_row, cache_dict):
             df = pd.read_parquet(source_path, columns=['日期'])
             
             # 缓存管理：如果缓存已满，删除最早的条目
-            
+            if len(cache_dict) >= SOURCE_FILE_CACHE_SIZE:
+                # 删除第一个键（最早添加的）
+                oldest_key = next(iter(cache_dict))
+                del cache_dict[oldest_key]
             
             cache_dict[cache_key] = df
         
@@ -163,6 +201,68 @@ def load_data_and_index(data_dir: Path):
     return train_data, val_data, train_index_df, val_index_df, feature_info
 
 
+def show_available_companies(train_index_df, val_index_df, num_to_show=30):
+    """显示数据中可用的公司名称"""
+    print("\n" + "=" * 80)
+    print("数据中可用的公司（前{}个）".format(num_to_show))
+    print("=" * 80)
+    
+    all_companies = set()
+    
+    if train_index_df is not None:
+        all_companies.update(train_index_df['company_name'].unique())
+    
+    if val_index_df is not None:
+        all_companies.update(val_index_df['company_name'].unique())
+    
+    all_companies = sorted(list(all_companies))
+    print(f"\n总公司数: {len(all_companies)}")
+    print("\n公司名称列表:")
+    for i, company in enumerate(all_companies[:num_to_show], 1):
+        print(f"  {i:3d}. {company}")
+    
+    if len(all_companies) > num_to_show:
+        print(f"  ... 还有 {len(all_companies) - num_to_show} 家公司")
+    
+    return all_companies
+
+
+def match_companies(target_companies, available_companies, use_fuzzy=False):
+    """
+    匹配目标公司
+    
+    Returns:
+        matched_companies: 匹配成功的公司名称列表
+        unmatched_companies: 未匹配的公司名称列表
+    """
+    matched = []
+    unmatched = []
+    
+    for target in target_companies:
+        if use_fuzzy:
+            # 模糊匹配：查找包含目标字符串的公司
+            found = False
+            for available in available_companies:
+                if target.lower() in available.lower() or available.lower() in target.lower():
+                    matched.append(available)
+                    found = True
+                    print(f"✓ 模糊匹配成功: '{target}' -> '{available}'")
+                    break
+            if not found:
+                unmatched.append(target)
+                print(f"✗ 未找到匹配: '{target}'")
+        else:
+            # 精确匹配
+            if target in available_companies:
+                matched.append(target)
+                print(f"✓ 精确匹配成功: '{target}'")
+            else:
+                unmatched.append(target)
+                print(f"✗ 未找到精确匹配: '{target}'")
+    
+    return matched, unmatched
+
+
 def extract_company_data(company_name, train_data, val_data, train_index_df, val_index_df, feature_info):
     """
     提取指定公司的所有样本
@@ -177,14 +277,13 @@ def extract_company_data(company_name, train_data, val_data, train_index_df, val
     sample_feature_columns = feature_info.get('sample_feature_columns', [])
     default_feature_columns = feature_info.get('feature_columns', [])
     
+    # 【v0.3新增】创建源文件缓存字典（使用OrderedDict保持插入顺序）
+    source_file_cache = OrderedDict()
     
     # 【v0.3新增】统计日期提取情况
     dates_extracted_count = 0
     dates_failed_count = 0
-
-    # 按源 parquet 路径缓存已读 DataFrame，避免同一公司多样本重复读盘
-    source_file_cache: dict = {}
-
+    
     # 提取训练集样本
     if train_data is not None and train_index_df is not None:
         company_train_indices = train_index_df[train_index_df['company_name'] == company_name].index.tolist()
@@ -434,28 +533,86 @@ def save_samples_to_excel(company_name, train_samples, val_samples, output_dir, 
     return output_files
 
 
+def generate_summary(matched_companies, extraction_results, output_dir):
+    """生成提取摘要"""
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    summary_path = output_dir / f"extraction_summary_{timestamp}.txt"
+    
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        f.write("=" * 80 + "\n")
+        f.write("公司数据提取摘要\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"提取时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"数据源: {PREPROCESSED_DATA_DIR}\n")
+        f.write(f"输出目录: {output_dir}\n")
+        f.write(f"真实日期提取: {'启用' if EXTRACT_REAL_DATES else '禁用'}\n\n")  # 【v0.3新增】
+        
+        f.write(f"成功提取公司数: {len(matched_companies)}\n\n")
+        
+        for company_name, result in extraction_results.items():
+            f.write("-" * 80 + "\n")
+            f.write(f"公司名称: {company_name}\n")
+            f.write(f"训练集样本数: {result['train_count']}\n")
+            f.write(f"验证集样本数: {result['val_count']}\n")
+            f.write(f"总样本数: {result['total_count']}\n")
+            f.write(f"生成文件数: {len(result['files'])}\n")
+            for file_path in result['files']:
+                f.write(f"  - {file_path.name}\n")
+            f.write("\n")
+    
+    print(f"\n✓ 摘要文件已保存: {summary_path}")
+    return summary_path
+
+
 def main():
+    """主函数"""
+    print("\n" + "=" * 80)
+    print("公司数据提取脚本 v0.3_20260126155425")
+    print("=" * 80)
+    
+    # 确定输出目录
     data_dir = Path(PREPROCESSED_DATA_DIR)
     output_dir = Path(OUTPUT_DIR) if OUTPUT_DIR else data_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    print(f"\n数据源: {data_dir}")
+    print(f"输出目录: {output_dir}")
+    print(f"目标公司数: {len(TARGET_COMPANIES)}")
+    print(f"真实日期提取: {'启用' if EXTRACT_REAL_DATES else '禁用'}")  # 【v0.3新增】
+    
     # 加载数据
     train_data, val_data, train_index_df, val_index_df, feature_info = load_data_and_index(data_dir)
-
-    # 从索引中收集待导出的公司（与 roll_generate_index 写入的 company_name 一致）
-    names: set[str] = set()
-    if train_index_df is not None and "company_name" in train_index_df.columns:
-        names.update(train_index_df["company_name"].dropna().astype(str).unique())
-    if val_index_df is not None and "company_name" in val_index_df.columns:
-        names.update(val_index_df["company_name"].dropna().astype(str).unique())
-    matched_companies = sorted(names)
+    
+    # 显示可用公司
+    available_companies = show_available_companies(train_index_df, val_index_df)
+    
+    # 匹配目标公司
+    print("\n" + "=" * 80)
+    print("匹配目标公司")
+    print("=" * 80)
+    matched_companies, unmatched_companies = match_companies(
+        TARGET_COMPANIES, available_companies, USE_FUZZY_MATCH
+    )
+    
+    print(f"\n匹配成功: {len(matched_companies)} 家")
+    print(f"未匹配: {len(unmatched_companies)} 家")
+    
+    if unmatched_companies:
+        print("\n未匹配的公司:")
+        for company in unmatched_companies:
+            print(f"  - {company}")
+    
     if not matched_companies:
-        raise ValueError(
-            "无法导出：训练/验证索引为空，或索引中缺少 company_name 列。"
-        )
-
+        print("\n错误: 没有匹配到任何公司，程序退出")
+        return
+    
+    # 提取数据并生成Excel
+    print("\n" + "=" * 80)
+    print("提取数据并生成Excel文件")
+    print("=" * 80)
+    
     extraction_results = {}
-
+    
     for company_name in matched_companies:
         print(f"\n处理公司: {company_name}")
         print("-" * 80)
@@ -480,6 +637,20 @@ def main():
             'total_count': len(train_samples) + len(val_samples),
             'files': output_files
         }
+    
+    # 生成摘要
+    print("\n" + "=" * 80)
+    print("生成摘要")
+    print("=" * 80)
+    summary_path = generate_summary(matched_companies, extraction_results, output_dir)
+    
+    # 打印完成信息
+    print("\n" + "=" * 80)
+    print("提取完成!")
+    print("=" * 80)
+    print(f"\n成功提取 {len(matched_companies)} 家公司的数据")
+    print(f"输出目录: {output_dir}")
+    print(f"摘要文件: {summary_path}")
 
 
 if __name__ == "__main__":
